@@ -28,8 +28,16 @@ import typing
 import traceback
 import bittensor as bt
 
+import torch
+import torch.nn as nn
+from torch.optim import Adam
+
+
 # import this repo
 import template
+from .misc import reconstruct_delta, TrainingModel, randomize_weights
+from transformers import ViTForImageClassification
+
 
 def get_config():
     # Step 2: Set up the configuration parser
@@ -67,6 +75,7 @@ def get_config():
     if not os.path.exists(config.full_path): os.makedirs(config.full_path, exist_ok=True)
     return config
 
+miner_model = TrainingModel(model=ViTForImageClassification.from_pretrained('againeureka/vit_cifar10_classification'))
 
 # Main takes the config and starts the miner.
 def main( config ):
@@ -102,6 +111,10 @@ def main( config ):
         my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
         bt.logging.info(f"Running miner on uid: {my_subnet_uid}")
 
+    
+    #Randomize weights to show training performance
+    randomize_weights(TrainingModel.model)
+
     # Step 4: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
     # The blacklist function decides if a request should be ignored.
@@ -124,7 +137,9 @@ def main( config ):
         return False, "Hotkey recognized!"
 
     # The priority function determines the order in which requests are handled.
-    # More valuable or higher-priority requests are processed before others.
+    # More valuable or higher-priority requests are processed before others. 
+    # Doesn't apply much here unless subnet is out of concensus. In which case the minor will align with 
+    # the validator majority
     def priority_fn( synapse: template.protocol.Dummy ) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
@@ -132,19 +147,61 @@ def main( config ):
         # that the request should be processed first. Lower values indicate that the
         # request should be processed later.
         # Below: simple logic, prioritize requests from entities with more stake.
+        # FIXME this subnet requires no prioritization. 
         caller_uid = metagraph.hotkeys.index( synapse.dendrite.hotkey ) # Get the caller index.
         prirority = float( metagraph.S[ caller_uid ] ) # Return the stake as the priority.
         bt.logging.trace(f'Prioritizing {synapse.dendrite.hotkey} with value: ', prirority)
         return prirority
 
+    def train_model(delta_input,
+                steps_to_train=None,
+                optimizer=None,
+                data_loader=None):
+        # Assume TrainingModel has a method get_weights() and a property concatenated_weights.
+        
+        miner_model.apply_delta(delta_input)
+        
+        # Define loss function - using Binary Cross Entropy as an example
+        criterion = nn.BCELoss()
+        
+        # Set default steps_to_train if None
+        if steps_to_train is None:
+            steps_to_train = 100  # Or another default value
+        
+        # Set default optimizer if None
+        if optimizer is None:
+            optimizer = Adam(miner_model.model.parameters(), lr=0.001)  # Or your preferred optimizer and learning rate
+        
+        # Example training loop (assuming binary classification task and provided data_loader)
+        for step in range(steps_to_train):
+            for inputs, labels in data_loader:
+                # Zero the parameter gradients
+                optimizer.zero_grad()
+                
+                # Forward pass
+                outputs = miner_model.model(inputs)
+                
+                # Compute loss
+                loss = criterion(outputs.squeeze(), labels.float())
+                
+                # Backward pass and optimize
+                loss.backward()
+                optimizer.step()
+            
+            # Print loss every 10 steps as an example (you may adjust or remove this)
+            if step % 10 == 0:
+                print(f'Step [{step}/{steps_to_train}], Loss: {loss.item():.4f}')
+
+            #Handles training.
+
     # This is the core miner function, which decides the miner's response to a valid, high-priority request.
-    def dummy( synapse: template.protocol.Dummy ) -> template.protocol.Dummy:
+    def train( synapse: template.protocol.Weight ) -> template.protocol.Weight:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple template logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        synapse.dummy_output = synapse.dummy_input * 2
+        synapse.delta_output = train_model(synapse.delta_input)
         return synapse
 
     # Step 5: Build and link miner functions to the axon.
@@ -155,14 +212,14 @@ def main( config ):
     # Attach determiners which functions are called when servicing a request.
     bt.logging.info(f"Attaching forward function to axon.")
     axon.attach(
-        forward_fn = dummy,
+        forward_fn = train,
         blacklist_fn = blacklist_fn,
         priority_fn = priority_fn,
     )
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
-    bt.logging.info(f"Serving axon {dummy} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
+    #bt.logging.info(f"Serving axon {dummy} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
     axon.serve( netuid = config.netuid, subtensor = subtensor )
 
     # Start  starts the miner's axon, making it active on the network.

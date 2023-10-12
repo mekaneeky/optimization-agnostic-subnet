@@ -31,6 +31,19 @@ import bittensor as bt
 # import this repo
 import template
 
+from .misc import TrainingModel
+
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+from torch.utils.data import DataLoader
+import numpy as np
+
+from transformers import ViTForImageClassification
+
+
+
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -67,6 +80,169 @@ def get_config():
 
     # Return the parsed config.
     return config
+
+validator_model = TrainingModel(validator_model=ViTForImageClassification.from_pretrained('againeureka/vit_cifar10_classification'))
+
+def secret_evaluation_task():
+    """
+    Evaluate the provided validator_model on the CIFAR-10 dataset.
+
+    Parameters:
+    - validator_model : torch.nn.Module - The validator_model to be evaluated.
+    - batch_size : int - The size of the batches used for evaluation.
+    - num_classes : int - Number of classes in the classification task (default is 10 for CIFAR-10)
+    - use_cuda : bool - Use CUDA if it's available
+
+    Returns:
+    - float : accuracy of the validator_model on the CIFAR-10 test dataset.
+    """
+    batch_size=32
+    num_classes=10
+    use_cuda=False
+    # Check CUDA availability and set the device accordingly
+    device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
+    validator_model.to(device)
+    
+    # Define a transformation that you apply to the CIFAR-10 test dataset
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Normalizing using mean and std of CIFAR-10
+    ])
+    
+    # Load the CIFAR-10 test dataset
+    testset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
+    
+    # Set the validator_model to evaluation mode
+    validator_model.eval()
+    
+    # Initialize a confusion matrix
+    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+    
+    # Define the loss criterion - using Cross Entropy Loss for multi-class classification
+    criterion = nn.CrossEntropyLoss()
+    
+    # Initialize variables to keep track of loss and correct predictions
+    total_loss = 0.0
+    total_correct = 0
+    
+    # Loop through the test data
+    with torch.no_grad():
+        for inputs, labels in testloader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            
+            # Forward pass
+            outputs = validator_model(inputs)
+            
+            # Compute the loss
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+            
+            # Get the predicted classes
+            _, predicted = torch.max(outputs, 1)
+            
+            # Update the confusion matrix
+            for i in range(batch_size):
+                confusion_matrix[labels[i], predicted[i]] += 1
+                
+            # Update the correct predictions counter
+            total_correct += (predicted == labels).sum().item()
+    
+    # Compute accuracy
+    accuracy = 100 * total_correct / len(testset)
+    
+    # You might also want to return other metrics, such as precision, recall, F1 score, etc., which can be computed from the confusion matrix
+    # For now, let's just return the accuracy
+    return accuracy    
+
+def evaluate_delta_on_metrics(delta):
+    
+    ## Update validator_model with delta
+    validator_model.apply_delta(delta) 
+
+    ## Evaluate validator_model performance on task
+    model_score = secret_evaluation_task()
+
+    return model_score
+
+def assert_weight_concensus(new_weight, metagraph):
+    raise NotImplementedError
+    renegades = []
+    for validator_value,validator_uid in validator_values: #FIXME psuedocode
+        try:
+            assert new_weight == validator_value
+        except AssertionError:
+            renegades.append(validator_uid)
+    if len(renegades) == 0:
+        return []
+    else:
+        return renegades
+    #ensures all validators agree on a weight, if not can blacklist renegade validators after timeout period has passed
+    #How would it be possible to read back all the blocks if joining later? 
+    #Or should it be state agnostic and just send compressed weights and call it a day?
+    #Should there be an oracle? that observes and gives latest directions
+    #No best way is to maintain that all weights are compressed deltas from the initial weights not the intermediate weight
+    #this will save the memory needed and since their is no dependance it works (bad for rollbacks though)
+    
+def agree_with_concensus(renegades):
+    raise NotImplementedError
+
+def blacklist_validators(renegades):
+    raise NotImplementedError
+    # Can choose to blacklist straightaway or apply different penalties/tardiness scores
+
+def get_new_delta(initial_weights, new_delta):
+    """
+    Computes the new delta (difference) between the initial weights and new weights (delta).
+
+    Parameters:
+        initial_weights (torch.Tensor): The initial weights as a concatenated tensor.
+        new_delta (torch.Tensor): The new weights or delta as a concatenated tensor.
+
+    Returns:
+        torch.Tensor: The calculated delta to be applied to the model weights.
+    """
+    # Ensure that initial_weights and new_delta have the same number of elements
+    assert initial_weights.numel() == new_delta.numel(), "Mismatch in number of elements between initial weights and new delta"
+
+    # Calculate the new delta: difference between the new weights (delta) and initial weights
+    computed_delta = new_delta - initial_weights
+
+    return computed_delta
+
+## FIXME what ensures that validators don't become lazy and just echo each other
+def set_new_delta_input(metagraph):
+    ## Get the best performing weight according to the last pass
+    ## TODO add weight averaging 
+    import pdb;pdb.set_trace()
+    new_delta = metagraph.axons[max(metagraph.weights)] #FIXME check syntax, 
+    #FIXME gets axon not their weight
+
+    ## The validators need to be done with the assesment in an agreed upon waiting period
+    # time_begin = time()
+    # while time() - time_begin < waiting_period:
+    #     renegades = assert_weight_concensus(new_weight)
+
+    # #if there are any renegade validators blacklist them
+    # blacklist_validators(renegades)
+
+    # #check self is not renegade
+    # agree_with_concensus(renegades)
+
+    return get_new_delta(validator_model.concatenated_initial_weights, new_delta)
+    #The goal is to get the weights of the miner response with the highest value
+    #FIXME. prone to race conditions
+
+### Each validator can come up with their own method of validator_model evaluation
+def model_evaluator(validator_model, weight):
+    raise NotImplementedError
+    ## Add a simple CIFAR-10 evaluator here
+
+#TODO add typing Synapse --> Synapse
+def evaluate_response_delta(response_delta, model_evaluator):
+    reconstructed_weight = reconstruct_delta(initial_weights, response_delta)
+    score = model_evaluator(validator_model, weight)
+    return score
 
 def main( config ):
     # Set up logging with the provided configuration and directory.
@@ -121,7 +297,7 @@ def main( config ):
                 # Send the query to all axons in the network.
                 metagraph.axons,
                 # Construct a dummy query.
-                template.protocol.Dummy( dummy_input = step ), # Construct a dummy query.
+                template.protocol.Weight( delta_input = set_new_delta_input(metagraph) ), # Construct a dummy query.
                 # All responses have the deserialize function called on them before returning.
                 deserialize = True, 
             )
@@ -137,8 +313,9 @@ def main( config ):
 
                 # Check if the miner has provided the correct response by doubling the dummy input.
                 # If correct, set their score for this round to 1.
-                if resp_i == step * 2:
-                    score = 1
+                # if resp_i == step * 2:
+                #     score = 1
+                score = evaluate_delta_on_metrics(resp_i)
 
                 # Update the global score of the miner.
                 # This score contributes to the miner's weight in the network.

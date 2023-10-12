@@ -19,7 +19,7 @@
 
 import typing
 import bittensor as bt
-
+import torch
 # TODO(developer): Rewrite with your protocol definition.
 
 # This is the protocol for the dummy miner and validator.
@@ -39,27 +39,33 @@ import bittensor as bt
 #   dummy_output = dendrite.query( Dummy( dummy_input = 1 ) )
 #   assert dummy_output == 2
 
-class Dummy( bt.Synapse ):
+class Weight( bt.Synapse ):
     """
     A simple dummy protocol representation which uses bt.Synapse as its base.
     This protocol helps in handling dummy request and response communication between
     the miner and the validator.
 
+    Initial initialization can be from existing model or shared seed + parameter distribution to minimize commnuication needed. 
+    Then there could be a decentralized record of deltas
+
     Attributes:
-    - dummy_input: An integer value representing the input request sent by the validator.
-    - dummy_output: An optional integer value which, when filled, represents the response from the miner.
+    - delta_input: A delta value of the latest concensus weight
+    - delta_output: A delta/compressed delta (TODO can validators penalize on communication size too) that is 
+    tested by the validators on the hidden evaluation metrics.
     """
 
     # Required request input, filled by sending dendrite caller.
-    dummy_input: int
+    delta_input: int
+    init_seed: int
 
     # Required request input hash, filled automatically when dendrite creates the request.
     # This allows for proper data validation and messages are signed with the hashes of the
-    # required body fields. Ensure you have a {field}_hash field for each required field.
-    dummy_input_hash: str = ""
-
+    # required body fields. Ensure you have a {field}_hash field for each required field. 
+    # 
+    delta_input_hash: str = ""
+    init_seed_hash: str = ""
     # Optional request output, filled by recieving axon.
-    dummy_output: typing.Optional[int] = None
+    delta_output: typing.Optional[int] = None
 
     def deserialize(self) -> int:
         """
