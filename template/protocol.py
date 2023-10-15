@@ -55,8 +55,8 @@ class Weight( bt.Synapse ):
     """
 
     # Required request input, filled by sending dendrite caller.
-    delta_input: int
-    init_seed: int
+    delta_input: typing.Any #FIXME make me a tensor
+    #init_seed
 
     # Required request input hash, filled automatically when dendrite creates the request.
     # This allows for proper data validation and messages are signed with the hashes of the
@@ -65,7 +65,7 @@ class Weight( bt.Synapse ):
     delta_input_hash: str = ""
     init_seed_hash: str = ""
     # Optional request output, filled by recieving axon.
-    delta_output: typing.Optional[int] = None
+    delta_output: typing.Any #FIXME make me a tensor
 
     def deserialize(self) -> int:
         """
@@ -83,4 +83,4 @@ class Weight( bt.Synapse ):
         >>> dummy_instance.deserialize()
         5
         """
-        return self.dummy_output
+        return self.delta_output

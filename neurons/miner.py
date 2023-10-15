@@ -35,7 +35,7 @@ from torch.optim import Adam
 
 # import this repo
 import template
-from .misc import reconstruct_delta, TrainingModel, randomize_weights
+from neurons.misc import reconstruct_delta, TrainingModel, randomize_weights
 from transformers import ViTForImageClassification
 
 
@@ -113,12 +113,12 @@ def main( config ):
 
     
     #Randomize weights to show training performance
-    randomize_weights(TrainingModel.model)
+    randomize_weights(miner_model.model)
 
     # Step 4: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
     # The blacklist function decides if a request should be ignored.
-    def blacklist_fn( synapse: template.protocol.Dummy ) -> typing.Tuple[bool, str]:
+    def blacklist_fn( synapse: template.protocol.Weight ) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function 
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -140,7 +140,7 @@ def main( config ):
     # More valuable or higher-priority requests are processed before others. 
     # Doesn't apply much here unless subnet is out of concensus. In which case the minor will align with 
     # the validator majority
-    def priority_fn( synapse: template.protocol.Dummy ) -> float:
+    def priority_fn( synapse: template.protocol.Weight ) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -219,7 +219,7 @@ def main( config ):
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
-    #bt.logging.info(f"Serving axon {dummy} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
+    #bt.logging.info(f"Serving axon {Weight} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
     axon.serve( netuid = config.netuid, subtensor = subtensor )
 
     # Start  starts the miner's axon, making it active on the network.

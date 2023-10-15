@@ -31,7 +31,7 @@ import bittensor as bt
 # import this repo
 import template
 
-from .misc import TrainingModel
+from neurons.misc import TrainingModel
 
 import torch
 import torch.nn as nn
@@ -81,7 +81,7 @@ def get_config():
     # Return the parsed config.
     return config
 
-validator_model = TrainingModel(validator_model=ViTForImageClassification.from_pretrained('againeureka/vit_cifar10_classification'))
+validator_model = TrainingModel(model=ViTForImageClassification.from_pretrained('againeureka/vit_cifar10_classification'))
 
 def secret_evaluation_task():
     """
@@ -214,8 +214,15 @@ def get_new_delta(initial_weights, new_delta):
 def set_new_delta_input(metagraph):
     ## Get the best performing weight according to the last pass
     ## TODO add weight averaging 
-    import pdb;pdb.set_trace()
-    new_delta = metagraph.axons[max(metagraph.weights)] #FIXME check syntax, 
+    if len(VALIDATOR_GLOBAL_STATE) == 0:
+        return get_new_delta(validator_model.concatenated_initial_weights, validator_model.concatenated_initial_weights)
+    else:
+        ## TODO fix me I can get race conditions
+        ## possibly by checking current hash with latest hash. 
+        ## What gets stored in a block?
+        best_delta_idx = metagraph.axons[max(metagraph.weights)] #FIXME check syntax, 
+        best_delta = VALIDATOR_GLOBAL_STATE[best_delta_idx]
+        return get_new_delta(validator_model.concatenated_initial_weights, best_delta)
     #FIXME gets axon not their weight
 
     ## The validators need to be done with the assesment in an agreed upon waiting period
@@ -229,7 +236,7 @@ def set_new_delta_input(metagraph):
     # #check self is not renegade
     # agree_with_concensus(renegades)
 
-    return get_new_delta(validator_model.concatenated_initial_weights, new_delta)
+    #return get_new_delta(validator_model.concatenated_initial_weights, new_delta)
     #The goal is to get the weights of the miner response with the highest value
     #FIXME. prone to race conditions
 
@@ -244,6 +251,10 @@ def evaluate_response_delta(response_delta, model_evaluator):
     score = model_evaluator(validator_model, weight)
     return score
 
+## TODO Class me or sth 
+## Also would validators be inclined to cheat?
+VALIDATOR_GLOBAL_STATE = {
+}
 def main( config ):
     # Set up logging with the provided configuration and directory.
     bt.logging(config=config, logging_dir=config.full_path)
@@ -293,13 +304,16 @@ def main( config ):
         try:
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
+            import pdb;pdb.set_trace()
             responses = dendrite.query(
                 # Send the query to all axons in the network.
                 metagraph.axons,
                 # Construct a dummy query.
                 template.protocol.Weight( delta_input = set_new_delta_input(metagraph) ), # Construct a dummy query.
                 # All responses have the deserialize function called on them before returning.
-                deserialize = True, 
+                deserialize = False, 
+                run_async = False,
+                timeout=60#FIXME needs to have long wait time. Add longass timeout
             )
 
             # Log the results for monitoring purposes.
@@ -315,7 +329,13 @@ def main( config ):
                 # If correct, set their score for this round to 1.
                 # if resp_i == step * 2:
                 #     score = 1
-                score = evaluate_delta_on_metrics(resp_i)
+                if resp_i is None:
+                    score = 0
+                else:
+                    import pdb;pdb.set_trace()
+                    VALIDATOR_GLOBAL_STATE[i] = resp_i #FIXME is it uid? 
+                    score = evaluate_delta_on_metrics(resp_i)
+                
 
                 # Update the global score of the miner.
                 # This score contributes to the miner's weight in the network.

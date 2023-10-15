@@ -24,9 +24,6 @@ def randomize_weights(model):
 
 
 
-import torch
-import hashlib
-
 class TrainingModel:
 
     def __init__(self, ModelToUse=None, model=None):
