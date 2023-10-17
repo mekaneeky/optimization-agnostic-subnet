@@ -199,6 +199,7 @@ def main( config ):
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple template logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
+        import pdb;pdb.set_trace()
         synapse.delta_output = train_model(synapse.delta_input)
         return synapse
 
