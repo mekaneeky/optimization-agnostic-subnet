@@ -154,7 +154,7 @@ def main( config ):
         return prirority
 
     def train_model(delta_input,
-                steps_to_train=None,
+                steps_to_train=1,
                 optimizer=None,
                 data_loader=None):
         # Assume TrainingModel has a method get_weights() and a property concatenated_weights.
@@ -164,9 +164,6 @@ def main( config ):
         # Define loss function - using Binary Cross Entropy as an example
         criterion = nn.BCELoss()
         
-        # Set default steps_to_train if None
-        if steps_to_train is None:
-            steps_to_train = 100  # Or another default value
         
         # Set default optimizer if None
         if optimizer is None:
@@ -193,7 +190,8 @@ def main( config ):
                 print(f'Step [{step}/{steps_to_train}], Loss: {loss.item():.4f}')
 
             #Handles training.
-
+        return miner_model.concatenated_weights #FIXME false weights not delta
+        
     # This is the core miner function, which decides the miner's response to a valid, high-priority request.
     def train( synapse: template.protocol.Weight ) -> template.protocol.Weight:
         # TODO(developer): Define how miners should process requests.
@@ -206,7 +204,7 @@ def main( config ):
 
     # Step 5: Build and link miner functions to the axon.
     # The axon handles request processing, allowing validators to send this process requests.
-    axon = bt.axon( wallet = wallet )
+    axon = bt.axon( wallet = wallet, port = config.axon.port )
     bt.logging.info(f"Axon {axon}")
 
     # Attach determiners which functions are called when servicing a request.

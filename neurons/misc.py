@@ -58,6 +58,7 @@ class TrainingModel:
 
     @concatenated_weights.setter
     def concatenated_weights(self, concatenated_tensor):
+        import pdb;pdb.set_trace()
         assert concatenated_tensor.numel() == sum(tensor.numel() for tensor in self._model.state_dict().values())
         tensor_iter = iter(concatenated_tensor)
         

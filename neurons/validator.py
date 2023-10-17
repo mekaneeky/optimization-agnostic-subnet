@@ -304,15 +304,15 @@ def main( config ):
         try:
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
-            import pdb;pdb.set_trace()
+            delta_to_miners = template.protocol.Weight( delta_input = set_new_delta_input(metagraph) )
             responses = dendrite.query(
                 # Send the query to all axons in the network.
                 metagraph.axons,
                 # Construct a dummy query.
-                template.protocol.Weight( delta_input = set_new_delta_input(metagraph) ), # Construct a dummy query.
+                delta_to_miners, # Construct a dummy query.
                 # All responses have the deserialize function called on them before returning.
                 deserialize = False, 
-                run_async = False,
+                #run_async = False,
                 timeout=60#FIXME needs to have long wait time. Add longass timeout
             )
 
@@ -332,7 +332,6 @@ def main( config ):
                 if resp_i is None:
                     score = 0
                 else:
-                    import pdb;pdb.set_trace()
                     VALIDATOR_GLOBAL_STATE[i] = resp_i #FIXME is it uid? 
                     score = evaluate_delta_on_metrics(resp_i)
                 
