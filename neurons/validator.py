@@ -305,6 +305,7 @@ def main( config ):
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
             delta_to_miners = template.protocol.Weight( delta_input = set_new_delta_input(metagraph) )
+            import pdb;pdb.set_trace()
             responses = dendrite.query(
                 # Send the query to all axons in the network.
                 metagraph.axons,
