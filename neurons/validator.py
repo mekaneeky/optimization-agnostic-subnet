@@ -305,14 +305,13 @@ def main( config ):
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
             delta_to_miners = template.protocol.Weight( delta_input = set_new_delta_input(metagraph) )
-            import pdb;pdb.set_trace()
             responses = dendrite.query(
                 # Send the query to all axons in the network.
                 metagraph.axons,
                 # Construct a dummy query.
                 delta_to_miners, # Construct a dummy query.
                 # All responses have the deserialize function called on them before returning.
-                deserialize = False, 
+                deserialize = True, 
                 #run_async = False,
                 timeout=60#FIXME needs to have long wait time. Add longass timeout
             )
