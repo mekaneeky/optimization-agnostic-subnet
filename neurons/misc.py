@@ -75,6 +75,7 @@ class TrainingModel:
 
         :param delta_tensor: Tensor - The concatenated delta weights tensor.
         """
+        import pdb;pdb.set_trace()
         assert delta_tensor.numel() == sum(tensor.numel() for tensor in self.initial_weights.values())
         tensor_iter = iter(delta_tensor)
 
